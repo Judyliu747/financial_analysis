@@ -1,544 +1,372 @@
 """
-Micron Technology (MU) Q1 FY2026 Earnings Update — English DOCX Report
-Quarter ended: November 27, 2025 | Reported: December 17, 2025
+Micron Technology (MU) Q3 FY2026 Earnings Update -- English DOCX report.
+Quarter ended: May 28, 2026 | Reported: June 24, 2026
 """
 
+from __future__ import annotations
+
 import os
+from pathlib import Path
+
 from docx import Document
-from docx.shared import Inches, Pt, RGBColor, Cm
+from docx.enum.section import WD_SECTION
+from docx.enum.table import WD_ALIGN_VERTICAL, WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.enum.table import WD_TABLE_ALIGNMENT, WD_ALIGN_VERTICAL
-from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
-import copy
+from docx.oxml.ns import qn
+from docx.shared import Inches, Pt, RGBColor
 
-OUT   = "/Users/macrossz/DevTools/VscodeProject/ClaudeCode/financial_analysis/output/MU"
-CHART = OUT   # charts are in same dir
+from mu_q3_fy2026_common import (
+    BUSINESS_UNITS,
+    CONSENSUS,
+    ESTIMATES,
+    FILING_DATE,
+    GUIDANCE_Q4,
+    IBD_URL,
+    INVESTOPEDIA_URL,
+    LONG_BRIDGE_QUOTE,
+    OUT,
+    PERIOD_END,
+    PREPARED_REMARKS_URL,
+    PRESENTATION_URL,
+    PRESS_RELEASE_URL,
+    QUARTER,
+    QUARTERLY_RESULTS_URL,
+    RELEASE_DATE,
+    REPORT_DATE,
+    RESULTS,
+    SCAS,
+    SOURCES,
+    TEN_Q_URL,
+)
 
-# ─── Hyperlink helper ────────────────────────────────────────────────────────
-def add_hyperlink(paragraph, url, text, color="1A6B8A", underline=True):
+
+DOCX = OUT / "MU_Q3_FY2026_Earnings_Update.docx"
+CHARTS = OUT
+BLUE = "1A6B8A"
+DARK = "111827"
+GRAY = "6B7280"
+LIGHT_BLUE = "EAF4FA"
+LIGHT_GRAY = "F3F4F6"
+GREEN = "2E7D52"
+RED = "C0392B"
+
+
+def add_hyperlink(paragraph, url: str, text: str, color: str = BLUE):
     part = paragraph.part
-    r_id = part.relate_to(url, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
-                           is_external=True)
+    rel_id = part.relate_to(
+        url,
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
+        is_external=True,
+    )
     hyperlink = OxmlElement("w:hyperlink")
-    hyperlink.set(qn("r:id"), r_id)
-    new_run = OxmlElement("w:r")
-    rPr = OxmlElement("w:rPr")
-    if color:
-        c = OxmlElement("w:color"); c.set(qn("w:val"), color); rPr.append(c)
-    if underline:
-        u = OxmlElement("w:u"); u.set(qn("w:val"), "single"); rPr.append(u)
-    rStyle = OxmlElement("w:rStyle"); rStyle.set(qn("w:val"), "Hyperlink"); rPr.append(rStyle)
-    new_run.append(rPr)
-    t = OxmlElement("w:t"); t.text = text; new_run.append(t)
-    hyperlink.append(new_run)
+    hyperlink.set(qn("r:id"), rel_id)
+    run = OxmlElement("w:r")
+    rpr = OxmlElement("w:rPr")
+    c = OxmlElement("w:color")
+    c.set(qn("w:val"), color)
+    rpr.append(c)
+    u = OxmlElement("w:u")
+    u.set(qn("w:val"), "single")
+    rpr.append(u)
+    run.append(rpr)
+    t = OxmlElement("w:t")
+    t.text = text
+    run.append(t)
+    hyperlink.append(run)
     paragraph._p.append(hyperlink)
-    return hyperlink
 
 
-# ─── Style helpers ───────────────────────────────────────────────────────────
-def set_cell_bg(cell, hex_color):
-    tc = cell._tc
-    tcPr = tc.get_or_add_tcPr()
-    shd = OxmlElement("w:shd")
-    shd.set(qn("w:val"), "clear")
-    shd.set(qn("w:color"), "auto")
-    shd.set(qn("w:fill"), hex_color)
-    tcPr.append(shd)
-
-def set_font(run, size=10, bold=False, italic=False, color=None, font_name="Times New Roman"):
+def set_run(run, size=10.5, bold=False, italic=False, color: str | None = None, font_name="Times New Roman"):
     run.font.name = font_name
+    run._element.rPr.rFonts.set(qn("w:ascii"), font_name)
+    run._element.rPr.rFonts.set(qn("w:hAnsi"), font_name)
     run.font.size = Pt(size)
-    run.font.bold = bold
-    run.font.italic = italic
+    run.bold = bold
+    run.italic = italic
     if color:
         run.font.color.rgb = RGBColor(*bytes.fromhex(color))
 
-def add_paragraph(doc, text="", size=10, bold=False, italic=False,
-                  color=None, align=WD_ALIGN_PARAGRAPH.LEFT,
-                  space_before=0, space_after=4, style=None):
-    if style:
-        p = doc.add_paragraph(style=style)
-    else:
-        p = doc.add_paragraph()
+
+def para(doc, text="", size=10.5, bold=False, italic=False, color: str | None = None,
+         align=WD_ALIGN_PARAGRAPH.LEFT, before=0, after=5):
+    p = doc.add_paragraph()
     p.alignment = align
-    p.paragraph_format.space_before = Pt(space_before)
-    p.paragraph_format.space_after = Pt(space_after)
+    p.paragraph_format.space_before = Pt(before)
+    p.paragraph_format.space_after = Pt(after)
+    p.paragraph_format.line_spacing = 1.1
     if text:
-        run = p.add_run(text)
-        set_font(run, size=size, bold=bold, italic=italic, color=color)
+        r = p.add_run(text)
+        set_run(r, size=size, bold=bold, italic=italic, color=color)
     return p
 
-def add_section_heading(doc, text, level=1):
+
+def heading(doc, text: str, level=1):
     if level == 1:
-        p = add_paragraph(doc, text.upper(), size=11, bold=True, color="1A6B8A",
-                          space_before=10, space_after=3)
-        # underline rule
-        pPr = p._p.get_or_add_pPr()
-        pBdr = OxmlElement("w:pBdr")
+        p = para(doc, text.upper(), size=13, bold=True, color=BLUE, before=10, after=4)
+        ppr = p._p.get_or_add_pPr()
+        border = OxmlElement("w:pBdr")
         bottom = OxmlElement("w:bottom")
-        bottom.set(qn("w:val"), "single"); bottom.set(qn("w:sz"), "6")
-        bottom.set(qn("w:space"), "4"); bottom.set(qn("w:color"), "1A6B8A")
-        pBdr.append(bottom); pPr.append(pBdr)
-    else:
-        add_paragraph(doc, text, size=10.5, bold=True, color="333333",
-                      space_before=6, space_after=2)
-    return
-
-def insert_image(doc, filename, width_in=6.5, caption=None):
-    path = os.path.join(CHART, filename)
-    if os.path.exists(path):
-        doc.add_picture(path, width=Inches(width_in))
-        last = doc.paragraphs[-1]
-        last.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        if caption:
-            cp = add_paragraph(doc, caption, size=8, italic=True, color="666666",
-                               align=WD_ALIGN_PARAGRAPH.CENTER, space_after=6)
+        bottom.set(qn("w:val"), "single")
+        bottom.set(qn("w:sz"), "6")
+        bottom.set(qn("w:space"), "4")
+        bottom.set(qn("w:color"), BLUE)
+        border.append(bottom)
+        ppr.append(border)
+        return p
+    return para(doc, text, size=11, bold=True, color=DARK, before=7, after=3)
 
 
-# ─── Table helper ────────────────────────────────────────────────────────────
-def make_table(doc, headers, rows, col_widths=None, header_bg="1A6B8A", alt_bg="EAF2F8"):
+def shade(cell, fill: str):
+    tc_pr = cell._tc.get_or_add_tcPr()
+    shd = OxmlElement("w:shd")
+    shd.set(qn("w:fill"), fill)
+    tc_pr.append(shd)
+
+
+def set_cell_text(cell, text, bold=False, color: str | None = None, align=WD_ALIGN_PARAGRAPH.LEFT, size=9):
+    cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+    p = cell.paragraphs[0]
+    p.alignment = align
+    p.paragraph_format.space_after = Pt(0)
+    run = p.add_run(str(text))
+    set_run(run, size=size, bold=bold, color=color)
+
+
+def table(doc, headers, rows, widths=None):
     tbl = doc.add_table(rows=1 + len(rows), cols=len(headers))
-    tbl.style = "Table Grid"
     tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
-    # Header row
-    hdr = tbl.rows[0]
+    tbl.style = "Table Grid"
     for i, h in enumerate(headers):
-        cell = hdr.cells[i]
-        set_cell_bg(cell, header_bg)
-        p = cell.paragraphs[0]
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run(h)
-        set_font(run, size=9, bold=True, color="FFFFFF")
-    # Data rows
-    for r_idx, row_data in enumerate(rows):
-        row = tbl.rows[r_idx + 1]
-        bg = alt_bg if r_idx % 2 == 1 else "FFFFFF"
-        for c_idx, val in enumerate(row_data):
-            cell = row.cells[c_idx]
-            set_cell_bg(cell, bg)
-            p = cell.paragraphs[0]
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER if c_idx > 0 else WD_ALIGN_PARAGRAPH.LEFT
-            run = p.add_run(str(val))
-            bold = r_idx == 0 and c_idx == 0
-            color = "1A6B8A" if "Beat" in str(val) or "▲" in str(val) else \
-                    "C0392B" if "Miss" in str(val) or "▼" in str(val) else None
-            set_font(run, size=9, bold=bold, color=color)
-    if col_widths:
-        for i, w in enumerate(col_widths):
-            for cell in tbl.column_cells(i):
-                cell.width = Inches(w)
+        shade(tbl.rows[0].cells[i], BLUE)
+        set_cell_text(tbl.rows[0].cells[i], h, bold=True, color="FFFFFF", align=WD_ALIGN_PARAGRAPH.CENTER, size=8.5)
+    for r_i, row in enumerate(rows):
+        for c_i, value in enumerate(row):
+            cell = tbl.rows[r_i + 1].cells[c_i]
+            shade(cell, "FFFFFF" if r_i % 2 == 0 else LIGHT_GRAY)
+            align = WD_ALIGN_PARAGRAPH.LEFT if c_i == 0 else WD_ALIGN_PARAGRAPH.CENTER
+            color = GREEN if any(x in str(value) for x in ["Beat", "+", "BUY"]) else RED if "Miss" in str(value) else None
+            set_cell_text(cell, value, color=color, align=align, size=8.5)
+    if widths:
+        for i, width in enumerate(widths):
+            for cell in tbl.columns[i].cells:
+                cell.width = Inches(width)
     return tbl
 
 
-# ─── Build Document ──────────────────────────────────────────────────────────
-doc = Document()
+def source_line(doc, items):
+    p = para(doc, "Source: ", size=7.5, italic=True, color=GRAY, before=2, after=4)
+    for idx, (label, url) in enumerate(items):
+        if idx:
+            r = p.add_run("; ")
+            set_run(r, size=7.5, italic=True, color=GRAY)
+        add_hyperlink(p, url, label)
+    return p
 
-# Page margins
-for section in doc.sections:
-    section.top_margin    = Cm(2.0)
-    section.bottom_margin = Cm(2.0)
-    section.left_margin   = Cm(2.2)
-    section.right_margin  = Cm(2.2)
 
-# ═══════════════════════════════════════════════════════════════════════════
-# PAGE 1 — EARNINGS SUMMARY
-# ═══════════════════════════════════════════════════════════════════════════
+def image(doc, filename: str, caption: str, source_items):
+    path = CHARTS / filename
+    if not path.exists():
+        para(doc, f"[Missing chart: {filename}]", color=RED)
+        return
+    p = para(doc, caption, size=8.5, bold=True, color=DARK, align=WD_ALIGN_PARAGRAPH.CENTER, before=4, after=2)
+    p.paragraph_format.keep_with_next = True
+    doc.add_picture(str(path), width=Inches(5.85))
+    doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
+    doc.paragraphs[-1].paragraph_format.keep_with_next = True
+    source_line(doc, source_items)
 
-# Header banner
-p = add_paragraph(doc, "EQUITY RESEARCH — EARNINGS UPDATE", size=9, bold=False,
-                  color="888888", align=WD_ALIGN_PARAGRAPH.CENTER, space_after=2)
-p = add_paragraph(doc, "MICRON TECHNOLOGY, INC.  |  NASDAQ: MU", size=18, bold=True,
-                  color="1A6B8A", align=WD_ALIGN_PARAGRAPH.CENTER, space_after=2)
-p = add_paragraph(doc, "Q1 FY2026 Earnings Update — Record Quarter Driven by AI Memory Demand",
-                  size=12, bold=False, italic=True, color="444444",
-                  align=WD_ALIGN_PARAGRAPH.CENTER, space_after=3)
 
-# Rating / PT banner table
-rating_tbl = doc.add_table(rows=1, cols=5)
-rating_tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
-cells = rating_tbl.rows[0].cells
-data = [
-    ("RATING", "BUY"),
-    ("PRICE TARGET", "$350"),
-    ("CURRENT PRICE¹", "$421.51²"),
-    ("MARKET CAP", "$475B"),
-    ("REPORT DATE", "December 17, 2025"),
-]
-colors_banner = ["1A6B8A", "2E7D52", "444444", "444444", "444444"]
-for cell, (lbl, val), col in zip(cells, data, colors_banner):
-    set_cell_bg(cell, "F4F8FB")
-    pp = cell.paragraphs[0]
-    pp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    r1 = pp.add_run(lbl + "\n")
-    set_font(r1, size=7.5, bold=True, color="888888")
-    r2 = pp.add_run(val)
-    set_font(r2, size=10.5, bold=True, color=col)
-
-add_paragraph(doc, "¹ Price as of April 10, 2026. ² Current price reflects subsequent appreciation after Q1 FY2026 results.",
-              size=7.5, italic=True, color="888888", space_before=2, space_after=6)
-
-# ─── Key Takeaways ───────────────────────────────────────────────────────────
-add_section_heading(doc, "KEY TAKEAWAYS")
-
-bullets = [
-    ("Record Revenue Beat:", "Revenue of $13.64B (+57% YoY, +21% QoQ) beat consensus of $13.0B by ~$0.64B (+4.9%), marking the third consecutive quarterly record."),
-    ("Massive EPS Upside:", "Non-GAAP EPS of $4.78 crushed consensus of $3.94 by $0.84 (+21.3%), driven by surging DRAM pricing and a favorable AI-driven product mix."),
-    ("Gross Margin Inflection:", "Non-GAAP gross margin expanded 11 percentage points sequentially to 56.8%, well above guidance of ~38.5%±1pp, reflecting HBM mix benefit and pricing power."),
-    ("HBM Sold Out Through 2026:", "Micron has completed price and volume agreements for its entire calendar 2026 HBM supply, including HBM4. HBM TAM seen growing ~40% CAGR to ~$100B by 2028."),
-    ("Guidance Surges:", "Q2 FY2026 guidance of $18.7B revenue and $8.42 non-GAAP EPS (vs. Q1 actuals of $13.64B/$4.78) implies ~37% sequential revenue acceleration, driven by HBM and data center ramp."),
-    ("CapEx Raised:", "FY2026 CapEx target raised to ~$20B (from $18B) to fund HBM capacity expansion and 1-gamma node ramp."),
-    ("Thesis: Intact — Upgrading Price Target:", "AI-driven memory demand continues to outpace supply. We maintain our BUY rating and raise our price target to $350 (from $290) on raised FY2026 estimates."),
-]
-for bold_text, body_text in bullets:
-    p = doc.add_paragraph(style="List Bullet")
-    p.paragraph_format.space_after = Pt(3)
-    r1 = p.add_run(bold_text + " ")
-    set_font(r1, size=10, bold=True, color="1A6B8A")
-    r2 = p.add_run(body_text)
-    set_font(r2, size=10)
-
-# ─── Results Snapshot Table ──────────────────────────────────────────────────
-add_section_heading(doc, "RESULTS SNAPSHOT — Q1 FY2026 (Quarter Ended November 27, 2025)")
-
-headers = ["Metric", "Q1 FY26 Actual", "Consensus Est.", "Beat / Miss", "vs. Q1 FY25 YoY"]
-rows = [
-    ["Revenue",           "$13.64B",  "$13.00B",  "▲ Beat +$0.64B (+4.9%)",   "+57.2%"],
-    ["DRAM Revenue",      "$10.80B",  "N/A",       "—",                         "+69.0%"],
-    ["NAND Revenue",      "$2.70B",   "N/A",       "—",                         "+22.0%"],
-    ["Non-GAAP Gross Margin", "56.8%","~47.0%",   "▲ Beat +980bps",            "+3,420bps"],
-    ["Non-GAAP Operating Income", "$6.4B", "N/A", "—",                         "N/M"],
-    ["Non-GAAP EPS",      "$4.78",    "$3.94",    "▲ Beat +$0.84 (+21.3%)",    "+167.0%"],
-    ["GAAP EPS",          "$4.60",    "$3.70",    "▲ Beat +$0.90 (+24.3%)",    "N/M"],
-    ["Operating Cash Flow","$8.41B",  "N/A",       "—",                         "+243%"],
-    ["Free Cash Flow",    "$3.93B",   "N/A",       "—",                         "N/M"],
-    ["CapEx",             "$4.50B",   "N/A",       "—",                         "—"],
-]
-make_table(doc, headers, rows, col_widths=[1.9, 1.1, 1.1, 1.7, 1.1])
-
-p = add_paragraph(doc, "Source: Micron Q1 FY2026 Earnings Release (December 17, 2025); Bloomberg consensus as of December 17, 2025.",
-                  size=7.5, italic=True, color="666666", space_before=2, space_after=4)
-
-doc.add_page_break()
-
-# ═══════════════════════════════════════════════════════════════════════════
-# PAGES 2–3 — DETAILED RESULTS ANALYSIS
-# ═══════════════════════════════════════════════════════════════════════════
-add_section_heading(doc, "DETAILED RESULTS ANALYSIS")
-
-add_section_heading(doc, "Revenue — Third Consecutive Record Quarter", level=2)
-add_paragraph(doc,
-    "Micron delivered revenue of $13.64 billion in Q1 FY2026, the third consecutive quarterly record, representing growth of "
-    "57.2% year-over-year and 20.5% sequentially. Results came in $640 million (4.9%) ahead of Bloomberg consensus of "
-    "$13.00 billion and above the high end of Micron's own guidance range of $8.6B±$200M provided the prior quarter (guidance "
-    "was for Q4 FY2025; Q1 FY2026 guidance was $13.0B±$400M). The outperformance was broad-based, with both DRAM and Cloud "
-    "Memory exceeding internal and Street expectations.", size=10, space_after=6)
-
-add_section_heading(doc, "DRAM — Record $10.8B, +69% YoY", level=2)
-add_paragraph(doc,
-    "DRAM revenue reached a record $10.8 billion, representing 79% of total revenue, up 69% year-over-year and 20% "
-    "sequentially. The principal driver was explosive demand for High Bandwidth Memory (HBM) from hyperscale cloud customers "
-    "building AI training and inference infrastructure. Server DRAM pricing remained robust as supply discipline from all "
-    "major DRAM manufacturers held firm. Micron's competitive position in HBM3E has improved materially, with the company "
-    "completing supply agreements for its entire calendar 2026 HBM allocation — including the next-generation HBM4 product "
-    "expected to ramp in Q2 FY2026. Management noted that HBM now accounts for a mid-teens percentage of total DRAM revenue, "
-    "with content-per-server economics driving continued bit demand growth.", size=10, space_after=6)
-
-insert_image(doc, "mu_chart1_revenue.png", caption=
-    "Exhibit 1: Quarterly Revenue Progression — Q1 FY2025 to Q1 FY2026 ($B)\n"
-    "Source: Micron Q1 FY2026 Earnings Release (Dec 17, 2025); Form 10-Q filed Dec 18, 2025")
-
-insert_image(doc, "mu_chart2_dram_nand.png", caption=
-    "Exhibit 2: DRAM vs. NAND Revenue by Quarter ($B)\n"
-    "Source: Micron Earnings Releases Q1 FY2025–Q1 FY2026")
-
-add_section_heading(doc, "NAND — Steady at $2.7B, +22% YoY", level=2)
-add_paragraph(doc,
-    "NAND revenue of $2.7 billion grew 22% year-over-year but was essentially flat sequentially (+8%), reflecting "
-    "a more muted pricing environment relative to DRAM. Enterprise SSD demand from data center customers remained "
-    "healthy, partially offset by softer consumer NAND pricing. Micron continues to prioritize QLC NAND adoption for "
-    "enterprise applications, which carries favorable ASP dynamics. NAND represented approximately 20% of total revenue "
-    "in Q1 FY2026, down from 27% a year ago, reflecting the faster DRAM ramp.", size=10, space_after=6)
-
-add_section_heading(doc, "Business Unit Performance", level=2)
-add_paragraph(doc,
-    "Micron reports revenue across four business units. Cloud Memory Business Unit (CMBU), which captures HBM and "
-    "server DRAM revenue, nearly doubled year-over-year to $5.28B (+100% YoY), driven by AI infrastructure buildout. "
-    "Mobile and Client Business Unit (MCBU) contributed $4.30B (+63% YoY) as smartphone DRAM content increased and "
-    "PC market conditions improved. Core Data Center Business Unit (CDBU) reached $2.40B (+4% YoY) on steady NAND "
-    "demand from data center operators. Automotive and Embedded Business Unit (AEBU) delivered $1.66B (+49% YoY), "
-    "reflecting strong ADAS and in-vehicle memory content growth.", size=10, space_after=6)
-
-insert_image(doc, "mu_chart5_business_units.png", caption=
-    "Exhibit 3: Q1 FY2026 Revenue by Business Unit ($B)\n"
-    "Source: Micron Q1 FY2026 Earnings Release (Dec 17, 2025)")
-
-doc.add_page_break()
-
-# ═══════════════════════════════════════════════════════════════════════════
-# PAGES 4–5 — KEY METRICS & GUIDANCE
-# ═══════════════════════════════════════════════════════════════════════════
-add_section_heading(doc, "KEY METRICS & GUIDANCE")
-
-add_section_heading(doc, "Gross Margin Inflection — 56.8%, +11pp QoQ", level=2)
-add_paragraph(doc,
-    "The headline surprise this quarter was gross margin expansion. Non-GAAP gross margin of 56.8% exceeded management's "
-    "guidance midpoint of approximately 47.5% by ~930 basis points and surpassed analyst consensus of ~47.0% by ~980bps. "
-    "The outperformance was driven by three factors: (1) favorable HBM product mix, which carries materially higher ASPs "
-    "and margins than standard DDR5; (2) better-than-expected DRAM pricing across server and mobile segments; and (3) "
-    "strong cost execution on the 1-beta node technology rollout. This represents an 11 percentage point sequential increase "
-    "from 45.8% in Q4 FY2025 and a ~34 percentage point improvement from 22.6% in Q1 FY2025, underscoring the dramatic "
-    "margin recovery since the trough.", size=10, space_after=6)
-
-insert_image(doc, "mu_chart4_gross_margin.png", caption=
-    "Exhibit 4: Non-GAAP Gross Margin Trend (%)\n"
-    "Source: Micron Earnings Releases Q1 FY2025–Q1 FY2026")
-
-insert_image(doc, "mu_chart6_beat_miss.png", caption=
-    "Exhibit 5: Q1 FY2026 Results vs. Consensus — Beat Across All Key Metrics\n"
-    "Source: Micron Q1 FY2026 Earnings Release; Bloomberg consensus as of Dec 17, 2025")
-
-add_section_heading(doc, "EPS — Record $4.78, Beat Consensus by 21%", level=2)
-add_paragraph(doc,
-    "Non-GAAP diluted EPS of $4.78 represented 58% sequential growth and 167% year-over-year growth, crushing consensus "
-    "of $3.94 by $0.84 per share — a 21.3% beat. GAAP EPS of $4.60 also exceeded consensus of $3.70 by $0.90. "
-    "The EPS beat reflected both operating leverage from the revenue upside and significant margin expansion. "
-    "Non-GAAP operating income reached $6.4 billion, representing a 47.0% operating margin, versus 27.5% in Q1 FY2025.", size=10, space_after=6)
-
-insert_image(doc, "mu_chart3_eps.png", caption=
-    "Exhibit 6: Non-GAAP Diluted EPS Progression vs. Consensus\n"
-    "Source: Micron Q1 FY2026 Earnings Release; Bloomberg consensus")
-
-add_section_heading(doc, "Cash Flow & Capital Allocation", level=2)
-add_paragraph(doc,
-    "Operating cash flow reached $8.41 billion in Q1 FY2026, up 47% sequentially from $5.73 billion in Q4 FY2025 "
-    "and up 243% from $2.45 billion in Q1 FY2025. Capital expenditures of $4.50 billion supported the HBM capacity "
-    "ramp and 1-gamma node development. Adjusted free cash flow of $3.93 billion was robust and is expected to grow "
-    "substantially in Q2 FY2026 as revenue scales further. Management raised FY2026 CapEx guidance to ~$20 billion "
-    "(from ~$18 billion previously), reflecting incremental investment in HBM manufacturing infrastructure.",
-    size=10, space_after=6)
-
-insert_image(doc, "mu_chart7_cash_flow.png", caption=
-    "Exhibit 7: Operating Cash Flow & Capital Expenditures ($B)\n"
-    "Source: Micron Earnings Releases; Form 10-Q filed December 18, 2025")
-
-add_section_heading(doc, "Q2 FY2026 Guidance — Exceptional Outlook", level=2)
-add_paragraph(doc,
-    "Management provided Q2 FY2026 guidance well above consensus expectations:", size=10, space_after=4)
-
-guide_headers = ["Metric", "Q1 FY26 Actual", "Q2 FY26 Guidance", "Sequential Change"]
-guide_rows = [
-    ["Revenue",          "$13.64B",   "$18.70B (±$400M)",   "+37.1%"],
-    ["Gross Margin",     "56.8%",     "~68% (±1%)",          "+~1,120bps"],
-    ["Non-GAAP EPS",     "$4.78",     "$8.42 (±$0.20)",     "+76.2%"],
-    ["GAAP EPS",         "$4.60",     "~$8.05 (est.)",       "~+75%"],
-]
-make_table(doc, guide_headers, guide_rows, col_widths=[1.9, 1.4, 2.0, 1.5])
-add_paragraph(doc, "Source: Micron Q1 FY2026 Earnings Call (December 17, 2025).",
-              size=7.5, italic=True, color="666666", space_before=2, space_after=6)
-
-add_paragraph(doc,
-    "The Q2 FY2026 guidance implies ~37% sequential revenue acceleration, ~11pp sequential gross margin expansion "
-    "to ~68%, and ~76% EPS growth — strikingly bullish numbers driven by HBM volume ramp, continued DRAM pricing "
-    "strength, and operating leverage. At the guidance midpoint, Q2 FY2026 would represent yet another Micron revenue record.",
-    size=10, space_after=6)
-
-insert_image(doc, "mu_chart9_guidance.png", caption=
-    "Exhibit 8: Q2 FY2026 Guidance vs. Q1 FY2026 Actuals\n"
-    "Source: Micron Q1 FY2026 Earnings Call (December 17, 2025)")
-
-doc.add_page_break()
-
-# ═══════════════════════════════════════════════════════════════════════════
-# PAGES 6–7 — INVESTMENT THESIS UPDATE
-# ═══════════════════════════════════════════════════════════════════════════
-add_section_heading(doc, "INVESTMENT THESIS UPDATE")
-
-add_section_heading(doc, "What Changed This Quarter", level=2)
-add_paragraph(doc,
-    "Q1 FY2026 exceeded even the most bullish Street expectations. Three developments stand out as thesis-defining:",
-    size=10, space_after=4)
-
-changes = [
-    ("HBM Sold Out for Full Year:",
-     "Completing price and volume agreements for 100% of CY2026 HBM supply — including HBM4 — eliminates near-term "
-     "demand risk and provides extraordinary visibility into fiscal H2 2026 (Q3-Q4 FY2026). This is unprecedented "
-     "in Micron's history and signals that AI infrastructure investment by hyperscalers (Microsoft, Google, Amazon, Meta) "
-     "is durable and accelerating."),
-    ("Gross Margin Step-Change:",
-     "Sustained 56.8% gross margin — and guidance for ~68% in Q2 — suggests that HBM is now a structural margin driver, "
-     "not a one-off. We revise our FY2026 gross margin estimate to 62% (from 50%) and our FY2027 estimate to 65% "
-     "(from 55%)."),
-    ("TAM Expansion:",
-     "Management's HBM TAM forecast of $100 billion by 2028 (from ~$35 billion in 2025), representing ~40% CAGR, "
-     "suggests an addressable market roughly 3x current levels. Micron's improving competitive position in HBM "
-     "alongside Samsung and SK Hynix means a share of this $100B TAM could meaningfully exceed prior assumptions."),
-]
-for bold_text, body_text in changes:
+def bullet(doc, title: str, body: str, color=BLUE):
     p = doc.add_paragraph(style="List Bullet")
     p.paragraph_format.space_after = Pt(4)
-    r1 = p.add_run(bold_text + " ")
-    set_font(r1, size=10, bold=True, color="1A6B8A")
-    r2 = p.add_run(body_text)
-    set_font(r2, size=10)
+    r1 = p.add_run(f"{title} ")
+    set_run(r1, bold=True, color=color)
+    r2 = p.add_run(body)
+    set_run(r2)
 
-insert_image(doc, "mu_chart8_hbm_tam.png", caption=
-    "Exhibit 9: Global HBM TAM Forecast ($B) — ~40% CAGR 2025–2028\n"
-    "Source: Micron management commentary, Q1 FY2026 Earnings Call (December 17, 2025)")
 
-add_section_heading(doc, "Key Risks", level=2)
-risks = [
-    ("AI CapEx Cycle Risk:", "A meaningful reduction in hyperscaler AI infrastructure spending could rapidly reverse HBM pricing and volume commitments. The current $20B+ annual CapEx plans by major cloud providers are dependent on continued AI workload growth."),
-    ("Competitive Intensity:", "SK Hynix remains the HBM market leader with ~50%+ share. Samsung continues to invest heavily in HBM and DRAM capacity. Any Micron HBM yield or qualification setbacks could shift customer allocations."),
-    ("NAND Oversupply:", "NAND market dynamics are less constructive than DRAM. Consumer NAND prices remain under pressure, and Chinese NAND players (YMTC) continue to expand capacity, which could weigh on Micron's NAND segment margins."),
-    ("Geopolitical/Export Controls:", "Escalating U.S.-China technology restrictions pose risks to Micron's ability to sell into China (historically ~10-15% of revenue) and could affect sourcing of equipment for fab expansions."),
-    ("Macro Cyclicality:", "Semiconductor memory markets are inherently cyclical. A downturn in PC, smartphone, or data center spending could rapidly impact DRAM pricing, as seen in the FY2023 downcycle."),
-]
-for bold_text, body_text in risks:
-    p = doc.add_paragraph(style="List Bullet")
-    p.paragraph_format.space_after = Pt(3)
-    r1 = p.add_run(bold_text + " ")
-    set_font(r1, size=10, bold=True, color="C0392B")
-    r2 = p.add_run(body_text)
-    set_font(r2, size=10)
+def setup_doc() -> Document:
+    doc = Document()
+    section = doc.sections[0]
+    section.top_margin = Inches(0.75)
+    section.bottom_margin = Inches(0.75)
+    section.left_margin = Inches(0.85)
+    section.right_margin = Inches(0.85)
+    section.header_distance = Inches(0.35)
+    section.footer_distance = Inches(0.35)
 
-add_section_heading(doc, "Key Catalysts", level=2)
-catalysts = [
-    "Q2 FY2026 earnings (expected March 2026): Execution vs. exceptional guidance",
-    "HBM4 ramp validation: Qualification at major hyperscalers (Google TPU, NVIDIA Blackwell)",
-    "1-gamma node yield improvement: Cost reduction unlocking further margin upside",
-    "China market resolution: Any relaxation of export controls could be a positive surprise",
-    "Share buyback acceleration: Strong FCF may enable increased capital returns",
-]
-for c in catalysts:
-    p = doc.add_paragraph(style="List Bullet")
-    p.paragraph_format.space_after = Pt(3)
-    run = p.add_run(c)
-    set_font(run, size=10)
+    styles = doc.styles
+    styles["Normal"].font.name = "Times New Roman"
+    styles["Normal"].font.size = Pt(10.5)
+    styles["Normal"]._element.rPr.rFonts.set(qn("w:ascii"), "Times New Roman")
+    styles["Normal"]._element.rPr.rFonts.set(qn("w:hAnsi"), "Times New Roman")
+    for style_name in ["Heading 1", "Heading 2", "Heading 3"]:
+        styles[style_name].font.name = "Times New Roman"
 
-doc.add_page_break()
+    header = section.header.paragraphs[0]
+    header.text = "Micron Technology (MU) | Q3 FY2026 Earnings Update"
+    header.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    for run in header.runs:
+        set_run(run, size=8, color=GRAY)
+    footer = section.footer.paragraphs[0]
+    footer.text = "For informational purposes only. Not investment advice."
+    footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    for run in footer.runs:
+        set_run(run, size=8, color=GRAY)
+    return doc
 
-# ═══════════════════════════════════════════════════════════════════════════
-# PAGES 8–10 — VALUATION & ESTIMATES
-# ═══════════════════════════════════════════════════════════════════════════
-add_section_heading(doc, "VALUATION & UPDATED ESTIMATES")
 
-add_section_heading(doc, "Updated Financial Estimates", level=2)
-add_paragraph(doc,
-    "Following the Q1 FY2026 beat and exceptional Q2 guidance, we materially revise our full-year FY2026 estimates upward. "
-    "Q2 guidance alone ($18.7B revenue, $8.42 EPS) implies the prior full-year consensus was significantly underestimated.",
-    size=10, space_after=6)
+def build():
+    doc = setup_doc()
 
-est_headers = ["Metric", "Q1 FY26\nActual", "Q2 FY26E\n(Guidance)", "FY2026E\n(Full Year)", "FY2026E\n(Prior Est.)", "FY2027E"]
-est_rows = [
-    ["Revenue ($B)",       "$13.64",   "$18.70",   "~$68–75B",   "~$48–52B",  "~$85–90B"],
-    ["Gross Margin (%)",   "56.8%",    "~68%",     "~62%",       "~50%",      "~65%"],
-    ["Non-GAAP EPS ($)",   "$4.78",    "$8.42",    "~$28–32",    "~$18–22",   "~$40–45"],
-    ["CapEx ($B)",         "$4.50",    "N/A",      "~$20B",      "~$18B",     "~$22B"],
-    ["FCF ($B)",           "$3.93",    "N/A",      "~$18–22B",   "~$12–15B",  "~$25–30B"],
-]
-make_table(doc, est_headers, est_rows, col_widths=[1.6, 1.0, 1.15, 1.15, 1.15, 1.0])
-add_paragraph(doc, "Source: Micron Q1 FY2026 Earnings Release & Call (Dec 17, 2025); Analyst estimates (Wolfe Research, B of A Securities); Bloomberg consensus.",
-              size=7.5, italic=True, color="666666", space_before=2, space_after=6)
+    # Page 1
+    para(doc, "EQUITY RESEARCH - EARNINGS UPDATE", size=9, color=GRAY, align=WD_ALIGN_PARAGRAPH.CENTER, after=2)
+    para(doc, "MICRON TECHNOLOGY, INC. (NASDAQ: MU)", size=19, bold=True, color=BLUE, align=WD_ALIGN_PARAGRAPH.CENTER, after=2)
+    para(doc, f"{QUARTER}: Record Quarter, SCA Visibility, and Another Beat-and-Raise", size=12,
+         italic=True, color=DARK, align=WD_ALIGN_PARAGRAPH.CENTER, after=4)
 
-add_section_heading(doc, "Valuation Framework", level=2)
-add_paragraph(doc,
-    "At $421.51 (as of April 10, 2026), Micron trades at approximately 15-16x our revised FY2026E EPS of ~$28–32 "
-    "and ~10-11x our FY2027E EPS of ~$40-45. On a P/Sales basis, Micron trades at ~6-7x FY2026E revenue of ~$68-75B, "
-    "with the caveat that our price reflects substantial post-Q1-earnings appreciation (the stock surged ~20-25% following "
-    "the December 2025 report).", size=10, space_after=4)
+    rating = table(
+        doc,
+        ["Rating", "Price Target", "Current Price", "Market Cap", "Report Date"],
+        [["BUY / OW", "$1,600", f"${LONG_BRIDGE_QUOTE['last_close']:,.2f}", f"~${LONG_BRIDGE_QUOTE['market_cap_b']/1000:.2f}T", REPORT_DATE]],
+        [1.05, 1.2, 1.25, 1.25, 1.25],
+    )
+    for cell in rating.rows[1].cells:
+        shade(cell, LIGHT_BLUE)
+    para(doc, f"Market data: {LONG_BRIDGE_QUOTE['source']}. yfinance was unavailable in the local runtime; price data was pulled dynamically via Longbridge.",
+         size=7.5, italic=True, color=GRAY, after=4)
 
-add_paragraph(doc,
-    "Our December 2025 price target of $350 (subsequently exceeded by the market) was based on: "
-    "(1) 16-17x our then-FY2026E non-GAAP EPS of ~$20; (2) enterprise value analysis implying ~5x FY2026E revenue; "
-    "and (3) peer-relative premiums vs. Samsung and SK Hynix given Micron's U.S. domicile and HBM ramp optionality. "
-    "We view the current $421 price as reflecting much of the upside captured in our Q2 guidance update thesis, "
-    "though further upside remains should HBM4 ramp and FY2027 estimates prove conservative.",
-    size=10, space_after=6)
+    heading(doc, "Earnings Summary")
+    revenue_beat = RESULTS["revenue_b"] - CONSENSUS["revenue_b"]
+    eps_beat = RESULTS["non_gaap_eps"] - CONSENSUS["eps"]
+    rows = [
+        ["Revenue", f"${RESULTS['revenue_b']:.2f}B", f"${CONSENSUS['revenue_b']:.2f}B", f"Beat +${revenue_beat:.2f}B (+{revenue_beat / CONSENSUS['revenue_b']:.1%})", "+346%"],
+        ["Non-GAAP EPS", f"${RESULTS['non_gaap_eps']:.2f}", f"${CONSENSUS['eps']:.2f}", f"Beat +${eps_beat:.2f} (+{eps_beat / CONSENSUS['eps']:.1%})", "+1,215%"],
+        ["Non-GAAP Gross Margin", "84.9%", "N/A", "Company record", "+45.9pp"],
+        ["Operating Cash Flow", "$25.39B", "N/A", "Record cash generation", "+451%"],
+        ["FQ4 Revenue Guide", "$50.0B +/- $1.0B", "$43.58B", "Guide +15% vs. Street", "+342% implied YoY"],
+    ]
+    table(doc, ["Metric", "Reported / Guide", "Consensus", "Variance", "YoY"], rows, [1.3, 1.4, 1.25, 1.75, 1.2])
+    source_line(doc, [("Micron earnings release", PRESS_RELEASE_URL), ("IBD / FactSet consensus", IBD_URL)])
 
-add_section_heading(doc, "Peer Comparison (as of December 2025)", level=2)
-peer_headers = ["Company", "Ticker", "CY2026E P/E", "CY2026E EV/Sales", "Gross Margin", "Rating"]
-peer_rows = [
-    ["Micron Technology",    "MU (NASDAQ)",     "~15x",   "~5–6x",  "~57%",  "BUY"],
-    ["Samsung Electronics",  "005930 (KRX)",    "~12x",   "~2x",    "~38%",  "N/R"],
-    ["SK Hynix",             "000660 (KRX)",    "~11x",   "~3x",    "~50%",  "N/R"],
-    ["Western Digital",      "WDC (NASDAQ)",    "~20x",   "~2x",    "~35%",  "HOLD"],
-    ["Seagate Technology",   "STX (NASDAQ)",    "~18x",   "~2x",    "~30%",  "N/R"],
-]
-make_table(doc, peer_headers, peer_rows, col_widths=[1.9, 1.3, 1.1, 1.1, 1.1, 0.8])
-add_paragraph(doc, "Source: Bloomberg consensus estimates as of December 17, 2025. N/R = Not Rated. CY = Calendar Year.",
-              size=7.5, italic=True, color="666666", space_before=2, space_after=6)
+    bullet(doc, "Top-line beat was large and clean.", "Revenue of $41.46B was $5.55B above FactSet consensus and rose 74% sequentially, with DRAM and NAND both setting records.")
+    bullet(doc, "Margins changed the valuation conversation.", "Non-GAAP gross margin reached 84.9% and operating margin reached 81.2%, levels that suggest the current memory shortage is not a normal cycle.")
+    bullet(doc, "Strategic Customer Agreements reduce historical cyclicality.", "Micron has signed 16 SCAs; signed-agreement RPO is approximately $100B, with $22B of expected cash deposits and related commitments.")
+    bullet(doc, "Maintaining BUY; raising price target to $1,600.", "Our target reflects higher FY2026/FY2027 EPS, improved revenue visibility, and a higher warranted multiple for a more contracted memory model.")
+    doc.add_page_break()
 
-insert_image(doc, "mu_chart10_mix.png", caption=
-    "Exhibit 10: Revenue Mix — DRAM vs. NAND & Other (%)\n"
-    "Source: Micron Earnings Releases Q1 FY2025–Q1 FY2026")
+    # Pages 2-3
+    heading(doc, "Detailed Results Analysis")
+    heading(doc, "Revenue: record scale and accelerating sequential growth", 2)
+    para(doc,
+         "Micron reported fiscal Q3 revenue of $41.46B for the quarter ended May 28, 2026, up 346% YoY and 74% QoQ. "
+         "The beat was driven by a severe demand/supply imbalance across both DRAM and NAND, a richer AI-driven mix, and pricing that moved far faster than investors had modeled. "
+         "The $5.55B revenue beat vs. FactSet was not a rounding issue: it was equivalent to more than half of the revenue Micron generated in the same quarter a year ago.")
+    image(doc, "mu_chart1_revenue.png", "Figure 1 - Quarterly revenue progression", [("Micron earnings release", PRESS_RELEASE_URL), ("Form 10-Q", TEN_Q_URL), ("FactSet via IBD", IBD_URL)])
 
-add_section_heading(doc, "Investment Recommendation", level=2)
-add_paragraph(doc,
-    "We maintain our BUY rating on Micron Technology. Q1 FY2026 results were exceptional by any measure — "
-    "a third consecutive quarterly record driven by AI-fueled HBM demand, with gross margins and EPS dramatically "
-    "exceeding expectations. The secured CY2026 HBM supply book and bullish Q2 guidance provide the kind of near-term "
-    "revenue visibility that is unusual for a cyclical semiconductor company. While we acknowledge that the current "
-    "stock price ($421) has already incorporated significant post-earnings upside, we see further appreciation to "
-    "our revised price target of $350 (note: market has surpassed this; see updated coverage for revised PT). "
-    "The long-term AI-memory thesis remains intact and is strengthening.", size=10, space_after=6)
+    heading(doc, "DRAM and NAND: both businesses are now capacity-constrained", 2)
+    para(doc,
+         "Prepared remarks show DRAM revenue of $31.3B, up 343% YoY and 67% QoQ, representing 76% of company revenue. "
+         "NAND revenue was $9.9B, up 361% YoY and 99% QoQ, representing 24% of revenue. Management attributed the growth mostly to pricing: DRAM ASPs increased in the low-60% range sequentially, while NAND ASPs increased in the mid-80% range.")
+    image(doc, "mu_chart4_dram_nand.png", "Figure 2 - DRAM and NAND revenue by quarter", [("Prepared remarks", PREPARED_REMARKS_URL), ("Investor presentation", PRESENTATION_URL)])
 
-doc.add_page_break()
+    heading(doc, "Business units: all four reached records", 2)
+    bu_rows = [[name, f"${rev:.1f}B", f"{gm}%", f"+{qoq}%", f"+{yoy}%"] for name, rev, gm, qoq, yoy in BUSINESS_UNITS]
+    table(doc, ["Business Unit", "Revenue", "Gross Margin", "QoQ", "YoY"], bu_rows, [1.8, 1.0, 1.0, 0.9, 0.9])
+    source_line(doc, [("Micron Q3 FY2026 press release", PRESS_RELEASE_URL), ("Investor presentation slides 22-24", PRESENTATION_URL)])
+    image(doc, "mu_chart5_business_units.png", "Figure 3 - Revenue by business unit", [("Micron investor presentation", PRESENTATION_URL)])
+    doc.add_page_break()
 
-# ═══════════════════════════════════════════════════════════════════════════
-# SOURCES & REFERENCES
-# ═══════════════════════════════════════════════════════════════════════════
-add_section_heading(doc, "SOURCES & REFERENCES")
+    heading(doc, "Profitability and Cash Flow")
+    heading(doc, "Gross margin expanded 10 points sequentially", 2)
+    para(doc,
+         "Non-GAAP gross margin reached 84.9%, up roughly 10 percentage points sequentially and more than double the year-ago level. The primary driver was pricing, with favorable mix and manufacturing execution also helping. This is the clearest signal that memory has temporarily shifted from commodity oversupply to scarcity economics.")
+    image(doc, "mu_chart3_margins.png", "Figure 4 - Gross and operating margin trend", [("Earnings release", PRESS_RELEASE_URL), ("Investor presentation", PRESENTATION_URL)])
 
-add_paragraph(doc, "Earnings Materials — Q1 FY2026 (Quarter ended November 27, 2025):",
-              size=10, bold=True, space_before=4, space_after=3)
+    heading(doc, "EPS and cash generation were both far ahead", 2)
+    para(doc,
+         "Non-GAAP EPS of $25.11 beat FactSet consensus by $4.25, or 20%. Non-GAAP operating income was $33.68B, equivalent to an 81.2% margin. Operating cash flow was $25.39B and adjusted free cash flow was $18.3B, a company record even with net capex of $7.1B.")
+    image(doc, "mu_chart2_eps.png", "Figure 5 - Non-GAAP EPS progression", [("Earnings release", PRESS_RELEASE_URL), ("FactSet via IBD", IBD_URL)])
+    image(doc, "mu_chart7_cash_flow_capex.png", "Figure 6 - Operating cash flow and net capex", [("Prepared remarks", PREPARED_REMARKS_URL), ("Investor presentation", PRESENTATION_URL)])
+    doc.add_page_break()
 
-sources = [
-    ("Earnings Release — Micron Q1 FY2026 (December 17, 2025)",
-     "https://investors.micron.com/news-releases/news-release-details/micron-technology-inc-reports-results-first-quarter-fiscal-2026"),
-    ("Earnings Release — via SEC EDGAR (December 17, 2025)",
-     "https://www.sec.gov/Archives/edgar/data/723125/000072312525000044/a2026q1ex991-pressrelease.htm"),
-    ("Form 10-Q — Filed December 18, 2025",
-     "https://investors.micron.com/static-files/502c03ac-dd06-4c88-9441-02ebfe6ff6fa"),
-    ("Earnings Call Transcript — Motley Fool (December 17, 2025)",
-     "https://www.fool.com/earnings/call-transcripts/2025/12/17/micron-mu-q1-2026-earnings-call-transcript/"),
-    ("Earnings Call Transcript — Seeking Alpha (December 17, 2025)",
-     "https://seekingalpha.com/article/4854216-micron-technology-inc-mu-q1-2026-earnings-call-transcript"),
-    ("Fiscal Q1 2026 Earnings Call Prepared Remarks — Micron IR",
-     "https://investors.micron.com/static-files/088991c5-a249-4f66-a0a6-258d9b66f3f9"),
-    ("Quarterly Results Page — Micron Investor Relations",
-     "https://investors.micron.com/quarterly-results"),
-    ("Earnings Call Transcript — Investing.com (December 17, 2025)",
-     "https://www.investing.com/news/transcripts/earnings-call-transcript-micron-q1-2026-beats-forecasts-stock-rises-93CH-4413912"),
-    ("MU Analyst Ratings & Price Targets — TipRanks",
-     "https://www.tipranks.com/stocks/mu/forecast"),
-    ("MU Analyst Coverage — MarketBeat",
-     "https://www.marketbeat.com/stocks/NASDAQ/MU/forecast/"),
-    ("HBM Market Analysis — TrendForce (December 2025)",
-     "https://www.trendforce.com/news/2025/12/18/news-micron-hikes-capex-to-20b-with-2026-hbm-supply-fully-booked-hbm4-ramps-2q26/"),
-    ("Micron Q1 FY2026 Analysis — Futurum Research",
-     "https://futurumgroup.com/insights/micron-technology-q1-fy-2026-sets-records-strong-q2-outlook/"),
-]
+    # Pages 4-5
+    heading(doc, "Guidance and Outlook")
+    heading(doc, "FQ4 guide again resets expectations", 2)
+    para(doc,
+         "For FQ4, Micron guided to revenue of $50.0B +/- $1.0B, non-GAAP gross margin of approximately 86%, non-GAAP operating expenses of approximately $1.65B, and non-GAAP EPS of $31.00 +/- $1.00. This was well above pre-earnings Street expectations of $43.58B revenue and $25.72 EPS.")
+    guide_rows = [
+        ["Revenue", f"${GUIDANCE_Q4['revenue_b_mid']:.1f}B +/- $1.0B", f"${CONSENSUS['q4_revenue_b']:.2f}B", "+15% vs. Street"],
+        ["Non-GAAP Gross Margin", "Approx. 86%", "N/A", "+110bps QoQ"],
+        ["Non-GAAP EPS", f"${GUIDANCE_Q4['non_gaap_eps_mid']:.2f} +/- $1.00", f"${CONSENSUS['q4_eps']:.2f}", "+21% vs. Street"],
+        ["Net Capex", "~$10B", "N/A", "FY2026 capex ~$27B"],
+    ]
+    table(doc, ["Metric", "Micron FQ4 Guide", "Consensus", "Implication"], guide_rows, [1.4, 1.7, 1.3, 1.7])
+    source_line(doc, [("Micron press release", PRESS_RELEASE_URL), ("Prepared remarks", PREPARED_REMARKS_URL), ("IBD / FactSet", IBD_URL)])
+    image(doc, "mu_chart9_guidance.png", "Figure 7 - Q4 guidance vs. Street", [("Micron press release", PRESS_RELEASE_URL), ("IBD / FactSet", IBD_URL)])
 
-for label, url in sources:
-    p = doc.add_paragraph()
-    p.paragraph_format.space_before = Pt(0)
-    p.paragraph_format.space_after  = Pt(4)
-    p.paragraph_format.left_indent  = Inches(0.25)
-    run = p.add_run("• ")
-    set_font(run, size=9.5, color="444444")
-    add_hyperlink(p, url, label)
+    heading(doc, "SCA visibility is the new thesis variable", 2)
+    para(doc,
+         "The most important qualitative update was the Strategic Customer Agreement framework. Micron disclosed 16 signed agreements. RPO at FQ3 was over $5B; including agreements executed after quarter-end, RPO is approximately $100B based on minimum committed volumes and minimum pricing. Management expects $22B of cash deposits and related commitments, with approximately $18B in cash deposits.")
+    image(doc, "mu_chart8_sca_visibility.png", "Figure 8 - Strategic customer agreement visibility", [("Prepared remarks", PREPARED_REMARKS_URL)])
+    doc.add_page_break()
 
-add_paragraph(doc, "\nConsensus Estimates: Bloomberg Terminal as of December 17, 2025.",
-              size=9, italic=True, color="666666", space_before=6, space_after=3)
-add_paragraph(doc, "Market Data: Yahoo Finance / Investing.com as of April 10, 2026.",
-              size=9, italic=True, color="666666", space_before=0, space_after=3)
-add_paragraph(doc,
-    "\nDISCLAIMER: This report is for informational purposes only and does not constitute investment advice. "
-    "Price targets and ratings are illustrative estimates based on publicly available information.",
-    size=8, italic=True, color="999999", space_before=6, space_after=3)
+    # Pages 6-7
+    heading(doc, "Updated Investment Thesis")
+    bullet(doc, "Thesis pillar 1 - AI memory has become strategic infrastructure.", "The quarter confirms that HBM, advanced DRAM, and data-center NAND are no longer simply cyclical components. They are becoming bottleneck resources in AI infrastructure.")
+    bullet(doc, "Thesis pillar 2 - Contracted demand supports a higher multiple.", "SCAs do not remove cyclicality, but they add minimum-volume, minimum-price visibility that should reduce the depth of future downcycles.")
+    bullet(doc, "Thesis pillar 3 - Supply will take years, not quarters, to catch up.", "Prepared remarks state that DRAM and NAND supply-demand conditions are expected to remain tight beyond calendar 2027. New U.S., Taiwan, Singapore, and Japan capacity helps but is not immediate.")
+    bullet(doc, "Thesis pillar 4 - Capital intensity rises, but cash flow rises faster.", "FY2026 capex is now expected at roughly $27B, yet Q3 FCF was $18.3B and management expects FQ4 FCF to increase substantially again.")
 
-# ─── Save ────────────────────────────────────────────────────────────────────
-outpath = os.path.join(OUT, "MU_Q1_FY2026_Earnings_Update.docx")
-doc.save(outpath)
-print(f"Report saved: {outpath}")
+    heading(doc, "Risks", 2)
+    bullet(doc, "Customer behavior risk:", "High memory prices could push hyperscalers, OEMs, and AI accelerator vendors to optimize memory usage or delay deployments.", RED)
+    bullet(doc, "Cycle risk:", "Memory remains a cyclical market. If supply additions arrive faster than demand, today’s margin structure could compress quickly.", RED)
+    bullet(doc, "Geopolitical risk:", "Micron’s global footprint and China exposure remain vulnerable to export controls, trade policy changes, and customer restrictions.", RED)
+    bullet(doc, "Valuation risk:", "After a sharp stock move, the market is already pricing in a significant duration of supernormal earnings.", RED)
+    doc.add_page_break()
+
+    # Pages 8-10
+    heading(doc, "Valuation and Estimate Revisions")
+    heading(doc, "Updated model", 2)
+    para(doc,
+         "We raise our illustrative FY2026 and FY2027 model materially. Q1-Q3 FY2026 non-GAAP EPS already totals approximately $42.09, and FQ4 guidance implies full-year non-GAAP EPS of roughly $73. The old model was anchored to a faster normalization of pricing; the new model assumes tight supply extends through 2027, in line with management commentary.")
+    est_rows = []
+    for metric, old, new, fy27 in ESTIMATES:
+        chg = (new / old - 1) if old else 0
+        est_rows.append([metric, f"{old:.1f}", f"{new:.1f}", f"+{chg:.0%}", f"{fy27:.1f}"])
+    table(doc, ["Metric", "Old FY2026E", "New FY2026E", "Change", "FY2027E"], est_rows, [1.65, 1.2, 1.2, 1.0, 1.1])
+    source_line(doc, [("Company filings", TEN_Q_URL), ("Micron prepared remarks", PREPARED_REMARKS_URL), ("Codex analysis", QUARTERLY_RESULTS_URL)])
+    image(doc, "mu_chart10_estimates_valuation.png", "Figure 9 - Estimate revisions and price target", [("Company filings", TEN_Q_URL), ("Codex analysis", QUARTERLY_RESULTS_URL)])
+
+    heading(doc, "Price target methodology", 2)
+    para(doc,
+         "We raise the illustrative price target to $1,600 from $1,250. The target applies roughly 13.9x our FY2027E non-GAAP EPS estimate of $115, a premium to a normal commodity-memory multiple but justified by signed SCA visibility, a stronger net-cash balance, and structurally higher AI-memory content. The target implies approximately 39% upside from the June 30 close of $1,154.29.")
+    para(doc,
+         "We would revisit the rating if either: (1) SCA cash deposits and RPO conversion fail to appear on schedule, (2) Q4 gross margin falls meaningfully below the 86% guide, or (3) industry supply commentary changes from tight beyond 2027 to normalization inside 2027.")
+
+    image(doc, "mu_chart6_beat_miss.png", "Figure 10 - Headline beat/miss summary", [("Micron press release", PRESS_RELEASE_URL), ("IBD / FactSet", IBD_URL)])
+    doc.add_page_break()
+
+    # Sources
+    heading(doc, "Sources and References")
+    para(doc, f"Latest-quarter verification: today is {REPORT_DATE}; the latest earnings release was dated {RELEASE_DATE}; the 10-Q was filed {FILING_DATE}. The release is within the last three months and all materials refer to {QUARTER}, quarter ended {PERIOD_END}.",
+         size=9.5, bold=True, color=DARK)
+    for label, url in SOURCES:
+        p = para(doc, "", after=3)
+        r = p.add_run("- ")
+        set_run(r, size=9)
+        add_hyperlink(p, url, label)
+    para(doc, f"Consensus: {CONSENSUS['source']}; additional consensus cross-check from Investopedia / Visible Alpha.", size=9, italic=True, color=GRAY)
+    p = para(doc, "Additional consensus cross-check: ", size=9, italic=True, color=GRAY)
+    add_hyperlink(p, INVESTOPEDIA_URL, "Investopedia / Visible Alpha")
+    para(doc,
+         "Disclaimer: This report is for informational purposes only and does not constitute investment advice or a recommendation to buy or sell securities.",
+         size=8.5, italic=True, color=GRAY)
+
+    doc.save(DOCX)
+    print(f"Report saved: {DOCX}")
+
+
+if __name__ == "__main__":
+    build()
